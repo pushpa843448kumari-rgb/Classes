@@ -1,0 +1,133 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Phase 3: Primitives
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isSignedIn() { 
+      return request.auth != null && request.auth.token.email_verified == true; 
+    }
+    
+    function isAdmin() {
+      // Check if the user is the bootstrapped admin or has 'admin' role in their user doc
+      return isSignedIn() && (
+        request.auth.token.email == 'shavpankaj124@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    // Phase 2: Entities & Validation
+    function isValidUser(data) {
+      return data.keys().hasAll(['email', 'role', 'name', 'createdAt'])
+        && data.email is string && data.email.size() <= 256
+        && data.role in ['student', 'admin']
+        && data.name is string && data.name.size() <= 100
+        && data.createdAt == request.time;
+    }
+
+    function isValidCourse(data) {
+      return data.keys().hasAll(['title', 'description', 'category', 'createdAt', 'updatedAt'])
+        && data.title is string && data.title.size() <= 200
+        && data.description is string && data.description.size() <= 5000
+        && data.category is string && data.category.size() <= 50
+        && data.createdAt == request.time
+        && data.updatedAt == request.time;
+    }
+    
+    function isValidVideo(data) {
+      return data.keys().hasAll(['courseId', 'title', 'videoUrl', 'createdAt'])
+        && data.courseId is string && data.courseId.size() <= 128
+        && data.title is string && data.title.size() <= 200
+        && data.videoUrl is string && data.videoUrl.size() <= 1000
+        && data.createdAt == request.time;
+    }
+
+    function isValidEnrollment(data) {
+      return data.keys().hasAll(['courseId', 'studentId', 'enrolledAt'])
+        && data.courseId is string && data.courseId.size() <= 128
+        && data.studentId is string && data.studentId.size() <= 128
+        && data.enrolledAt == request.time;
+    }
+
+    // Rules
+    match /users/{userId} {
+      // Anyone signed in can read User profiles (for now, maybe just keep them accessible)
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+
+      allow create: if isSignedIn() 
+        && isValidId(userId)
+        && request.auth.uid == userId
+        && isValidUser(incoming())
+        // Cannot self-assign admin unless they are the bootstrapped email
+        && (incoming().role == 'student' || request.auth.token.email == 'shavpankaj124@gmail.com');
+        
+      allow update: if isSignedIn()
+        && isValidId(userId)
+        && request.auth.uid == userId
+        && incoming().diff(existing()).affectedKeys().hasOnly(['name'])
+        && incoming().name is string
+        && incoming().name.size() <= 100;
+        
+      // No delete for users
+    }
+
+    match /courses/{courseId} {
+      allow read: if isSignedIn();
+      
+      allow create: if isAdmin() 
+        && isValidId(courseId)
+        && isValidCourse(incoming());
+        
+      allow update: if isAdmin()
+        && isValidId(courseId)
+        && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'category', 'thumbnail', 'updatedAt'])
+        && incoming().updatedAt == request.time;
+        
+      allow delete: if isAdmin() && isValidId(courseId);
+    }
+    
+    match /videos/{videoId} {
+      // Students who are enrolled? Let's just say signed in people for now, or enrolled students.
+      // Easiest is any signed in user can read.
+      allow read: if isSignedIn();
+      
+      allow create: if isAdmin()
+        && isValidId(videoId)
+        && isValidVideo(incoming())
+        && exists(/databases/$(database)/documents/courses/$(incoming().courseId));
+        
+      allow update: if isAdmin()
+        && isValidId(videoId)
+        && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'videoUrl'])
+        && incoming().title is string && incoming().title.size() <= 200
+        && incoming().videoUrl is string && incoming().videoUrl.size() <= 1000;
+        
+      allow delete: if isAdmin() && isValidId(videoId);
+    }
+    
+    match /enrollments/{enrollmentId} {
+      allow get: if isSignedIn() && existing().studentId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.studentId == request.auth.uid;
+      
+      allow create: if isSignedIn()
+        && isValidId(enrollmentId)
+        && isValidEnrollment(incoming())
+        && incoming().studentId == request.auth.uid
+        && exists(/databases/$(database)/documents/courses/$(incoming().courseId));
+        
+      allow delete: if isSignedIn()
+        && isValidId(enrollmentId)
+        && existing().studentId == request.auth.uid;
+    }
+  }
+}

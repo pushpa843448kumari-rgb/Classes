@@ -1,0 +1,116 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user profile, representing either a Student or Admin.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "User's email address"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["student", "admin"],
+          "description": "Role of the user, used for role-based access control."
+        },
+        "name": {
+          "type": "string",
+          "description": "Full name of the user"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["email", "role", "name", "createdAt"]
+    },
+    "Course": {
+      "title": "Course",
+      "description": "A course created by an admin.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string"
+        },
+        "thumbnail": {
+          "type": "string",
+          "description": "URL to the course thumbnail"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["title", "description", "category", "createdAt", "updatedAt"]
+    },
+    "Video": {
+      "title": "Video",
+      "description": "A video lecture under a course.",
+      "type": "object",
+      "properties": {
+        "courseId": {
+          "type": "string",
+          "description": "Reference to the Course"
+        },
+        "title": {
+          "type": "string"
+        },
+        "videoUrl": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["courseId", "title", "videoUrl", "createdAt"]
+    },
+    "Enrollment": {
+      "title": "Enrollment",
+      "description": "Student's enrollment in a course.",
+      "type": "object",
+      "properties": {
+        "courseId": {
+          "type": "string"
+        },
+        "studentId": {
+          "type": "string"
+        },
+        "enrolledAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["courseId", "studentId", "enrolledAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles. Contains role."
+    },
+    "courses/{courseId}": {
+      "schema": { "$ref": "#/entities/Course" },
+      "description": "Courses list."
+    },
+    "videos/{videoId}": {
+      "schema": { "$ref": "#/entities/Video" },
+      "description": "Video lectures."
+    },
+    "enrollments/{enrollmentId}": {
+      "schema": { "$ref": "#/entities/Enrollment" },
+      "description": "Course enrollments."
+    }
+  }
+}
